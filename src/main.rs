@@ -17,13 +17,13 @@ fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
     let input: Box<dyn io::Read> = match args.input {
-        Some(path) => Box::new(File::open(path)?),
-        None => Box::new(io::stdin().lock()),
+        Some(path) => Box::new(BufReader::new(File::open(path)?)),
+        None => Box::new(BufReader::new(io::stdin().lock())),
     };
 
     let mut output: Box<dyn Write> = match args.o {
         Some(path) => Box::new(BufWriter::new(File::create(path)?)),
-        None => Box::new(io::stdout().lock()),
+        None => Box::new(BufWriter::new(io::stdout().lock())),
     };
 
     let reader = BufReader::new(input);
