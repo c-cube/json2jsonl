@@ -15,6 +15,7 @@ Arguments:
   [INPUT]  Input file (stdin if not provided)
 
 Options:
-  -o, --o <O>  Output file (stdout if not provided)
-  -h, --help   Print help
+  -o, --o <O>     Output file (stdout if not provided)
+  -p, --progress  Progress bar
+  -h, --help      Print help
 ```
