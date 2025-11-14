@@ -1,9 +1,8 @@
 use clap::Parser;
 use indicatif::{ProgressBar, ProgressStyle};
+use serde_json::value::RawValue;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, BufWriter, Read, Write};
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 #[derive(Parser)]
@@ -22,15 +21,15 @@ struct Args {
 }
 
 struct BufReaderWithCount<R> {
-    count: Arc<AtomicU64>,
+    count: u64,
     rd: BufReader<R>,
 }
 
 impl<R: Read> BufReaderWithCount<R> {
     fn new(r: R) -> Self {
         Self {
-            count: Arc::new(AtomicU64::new(0)),
-            rd: BufReader::new(r),
+            count: 0,
+            rd: BufReader::with_capacity(256 * 1024, r),
         }
     }
 }
@@ -38,7 +37,7 @@ impl<R: Read> BufReaderWithCount<R> {
 impl<T: Read> Read for BufReaderWithCount<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let n = self.rd.read(buf)?;
-        self.count.fetch_add(n as u64, Ordering::Relaxed);
+        self.count += n as u64;
         Ok(n)
     }
 }
@@ -48,8 +47,43 @@ impl<T: Read> BufRead for BufReaderWithCount<T> {
     }
 
     fn consume(&mut self, n: usize) {
-        self.count.fetch_add(n as u64, Ordering::Relaxed);
+        self.count += n as u64;
         self.rd.consume(n)
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum SkipRes {
+    KeepSkipping,
+    ExpectValue,
+    End,
+}
+
+#[derive(Debug)]
+struct SkipState {
+    at_beginning: bool,
+}
+
+impl SkipState {
+    fn skip(&mut self, buf: &[u8]) -> (SkipRes, usize) {
+        let mut i = 0;
+        while i < buf.len() {
+            let c = buf[i];
+            i += 1;
+            if c == b' ' || c == b'\t' || c == b'\n' {
+                continue;
+            } else if c == b'[' && self.at_beginning {
+                self.at_beginning = false;
+                return (SkipRes::ExpectValue, i);
+            } else if c == b',' && !self.at_beginning {
+                return (SkipRes::ExpectValue, i);
+            } else if c == b']' && !self.at_beginning {
+                return (SkipRes::End, i);
+            } else {
+                panic!("malformed json")
+            }
+        }
+        return (SkipRes::KeepSkipping, buf.len());
     }
 }
 
@@ -81,18 +115,39 @@ fn main() -> anyhow::Result<()> {
         None => Box::new(BufWriter::new(io::stdout().lock())),
     };
 
-    let reader = BufReaderWithCount::new(input);
-    let reader_count = reader.count.clone();
-    let stream = large_json_array::JsonStream::new(reader);
+    let mut reader = BufReaderWithCount::new(input);
+    let mut skip_st = SkipState { at_beginning: true };
 
-    let mut old_count = 0;
-    for value in stream {
-        let value = value?;
-        serde_json::to_writer(&mut output, &value)?;
+    let mut old_count: u64 = 0;
+    'outer_loop: loop {
+        // remove leading '[' or ','
+        'remove_prefix: loop {
+            let (st, n) = {
+                let buf = reader.fill_buf()?;
+                skip_st.skip(buf)
+            };
+
+            reader.consume(n);
+
+            match st {
+                SkipRes::KeepSkipping => (),
+                SkipRes::ExpectValue => {
+                    break 'remove_prefix;
+                }
+                SkipRes::End => {
+                    break 'outer_loop;
+                }
+            }
+        }
+
+        {
+            let mut deser = serde_json::Deserializer::from_reader(&mut reader);
+            let value: Box<RawValue> = serde::Deserialize::deserialize(&mut deser)?;
+            serde_json::to_writer(&mut output, &value)?;
+        }
         writeln!(output)?;
 
-        let new_count = reader_count.load(Ordering::Relaxed);
-
+        let new_count = reader.count;
         if let Some(bar) = &progress {
             bar.inc(new_count - old_count);
         }

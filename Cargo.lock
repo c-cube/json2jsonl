@@ -183,18 +183,8 @@ dependencies = [
  "anyhow",
  "clap",
  "indicatif",
- "large-json-array",
+ "serde",
  "serde_json",
-]
-
-[[package]]
-name = "large-json-array"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b628a2ce56de34984742fc9d3c798271e0c30fb5bda327b3845b887b0ae11a4"
-dependencies = [
- "serde_json",
- "thiserror",
 ]
 
 [[package]]
@@ -314,26 +304,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "thiserror"
-version = "2.0.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f63587ca0f12b72a0600bcba1d40081f830876000bb46dd2337a3051618f4fc8"
-dependencies = [
- "thiserror-impl",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "2.0.17"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ff15c8ecd7de3849db632e14d18d2571fa09dfc5ed93479bc4485c7a517c913"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
